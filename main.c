@@ -19,22 +19,29 @@ void  get_qxwz_sdk_account_info(void);
 //unsigned char buf_[] = "wendao\r\n";
 
 void qxwz_rtcm_response_callback(qxwz_rtcm data){
-    //printf("QXWZ_RTCM_DATA:%s\n",data.buffer);
+    printf("RTK is running...\n");
     QXLOGI("QXWZ_RTCM_DATA:%s\n",data.buffer);
     QXLOGI("QXWZ_RTCM_DATA:%ld\n",data.length);
-   write(fd_rtcm, data.buffer, data.length);
-//write(fd_rtcm, buf_,8);
+    write(fd_rtcm, data.buffer, data.length);
+
 }
 
 
 void qxwz_status_response_callback(qxwz_rtcm_status code){
     //printf("QXWZ_RTCM_STATUS:%d\n",code);
-    QXLOGI("QXWZ_RTCM_STATUS:%d\n",code);
+    QXLOGI("QXWZ_RTCM_STATUS:%d\t",code);
 	struct tm *ptr = NULL;
 	//test account expire
 	if(code == QXWZ_STATUS_OPENAPI_ACCOUNT_TOEXPIRE){
 		get_qxwz_sdk_account_info();
 	}
+	else if(code == QXWZ_STATUS_OPENAPI_ACCOUNT_EXPIRED)
+		printf("账号到期\n");
+	else if(code == QXWZ_STATUS_APPKEY_IDENTIFY_FAIL)
+		printf("验证失败\n");
+	
+	else
+		printf("\n");
 }
 
 void  get_qxwz_sdk_account_info(void)
@@ -56,7 +63,7 @@ void  get_qxwz_sdk_account_info(void)
 	if(p_account_info->NtripPassword != NULL) {
 		printf("NtripPassword=%s\n",p_account_info->NtripPassword);
 	}
-	printf("expire_time=%ld\n",p_account_info->expire_time);
+	printf("账号即将到期 expire time : %ld\n",p_account_info->expire_time);
 }
 
 //void getAccountExpireDate(void);
@@ -128,13 +135,13 @@ int main(int argc, const char * argv[]) {
 	
 	tcflush(fd_rtcm,TCIOFLUSH);
 
-    //每秒发送gga以获取最新的rtcm数据流
+    //每秒发送gga以获取最新的rtcm数据流 
     while(1)
     {
     	usleep(980000);
-        QXLOGI("Send GGA done\r\n");
+        //QXLOGI("Send GGA done\r\n");
 		//getAccountExpireDate();
-		get_qxwz_sdk_account_info();
+		//get_qxwz_sdk_account_info();
 		
 		int len = read(fd_rtcm,gpggaMsg,199);
 		
@@ -142,7 +149,7 @@ int main(int argc, const char * argv[]) {
 			continue;
 		gpggaMsg[len] = '\0';
 		
-		printf("\n%s\n\n",gpggaMsg);
+		printf("%s\n",gpggaMsg);
 		
 		qxwz_rtcm_sendGGAWithGGAString(gpggaMsg);
     }
