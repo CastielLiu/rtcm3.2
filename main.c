@@ -23,25 +23,30 @@ void qxwz_rtcm_response_callback(qxwz_rtcm data){
     QXLOGI("QXWZ_RTCM_DATA:%s\n",data.buffer);
     QXLOGI("QXWZ_RTCM_DATA:%ld\n",data.length);
     write(fd_rtcm, data.buffer, data.length);
-
 }
 
 
-void qxwz_status_response_callback(qxwz_rtcm_status code){
-    //printf("QXWZ_RTCM_STATUS:%d\n",code);
-    QXLOGI("QXWZ_RTCM_STATUS:%d\t",code);
+void qxwz_status_response_callback(qxwz_rtcm_status code)
+{
 	struct tm *ptr = NULL;
 	//test account expire
-	if(code == QXWZ_STATUS_OPENAPI_ACCOUNT_TOEXPIRE){
+	if(code == QXWZ_STATUS_OPENAPI_ACCOUNT_TOEXPIRE)
 		get_qxwz_sdk_account_info();
-	}
 	else if(code == QXWZ_STATUS_OPENAPI_ACCOUNT_EXPIRED)
 		printf("账号到期\n");
 	else if(code == QXWZ_STATUS_APPKEY_IDENTIFY_FAIL)
 		printf("验证失败\n");
-	
+	else if(code == QXWZ_STATUS_APPKEY_IDENTIFY_SUCCESS)
+		printf("验证成功\n");
+	else if(code == QXWZ_STATUS_GGA_SEND_NOT_AVAIABLE)
+		printf("非法的GPGGA数据\n");
+	else if(code == QXWZ_STATUS_NTRIP_RECEIVING_DATA)
+		printf("正在接收服务器数据\n");
+	else if(code == QXWZ_STATUS_NTRIP_CONNECTED)
+		printf("连接服务器成功\n");
 	else
-		printf("\n");
+		QXLOGI("QXWZ_RTCM_STATUS:%d\n",code);;
+		
 }
 
 void  get_qxwz_sdk_account_info(void)
@@ -89,10 +94,10 @@ int main(int argc, const char * argv[]) {
     //apapKey申请详细见说明文档
     qxwz_config config;
     //RTD
-    config.appkey="549565";
-    config.appSecret="a9fa0d817d5ad7f7641d73d0cdc510288d97fb05003553640f07565d04ee9c5e";
-    config.deviceId="78:0c:b8:d7:2f:17";
-    config.deviceType="test";
+    config.appkey="A48g21q9e7if";
+    config.appSecret="07f5cfb3f9a6299f";
+    config.deviceId="little_ant";
+    config.deviceType="novatel";
 
     qxwz_setting(&config);
     //启动rtcm sdk
