@@ -1,10 +1,15 @@
+#include <ros/ros.h>
 #include <stdio.h>
 #include <time.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <std_msgs/String.h>
 
-#include "qxwz_rtcm.h"
-#include "serial_open.h"
+extern "C"{
+	#include "rtk/qxwz_rtcm.h"
+}
+
+#include "rtk/serial_open.h"
 //#include "qxlog.h"
 
 #undef QXLOGI
@@ -12,6 +17,8 @@
 
 //#define _QXWZ_TEST_START_STOP
 int fd_rtcm;
+std::string g_rtk_status;
+int g_status_code;
 
 qxwz_account_info *p_account_info = NULL;
 void  get_qxwz_sdk_account_info(void);
@@ -19,34 +26,69 @@ void  get_qxwz_sdk_account_info(void);
 //unsigned char buf_[] = "wendao\r\n";
 
 void qxwz_rtcm_response_callback(qxwz_rtcm data){
-    printf("RTK is running...\n");
-    QXLOGI("QXWZ_RTCM_DATA:%s\n",data.buffer);
-    QXLOGI("QXWZ_RTCM_DATA:%ld\n",data.length);
+    printf("RTK is running...\t");
+    
+    printf("QXWZ_RTCM_DATA len:%ld\n",data.length);
+/*    printf("QXWZ_RTCM_DATA:%s\n",data.buffer);*/
+    
     write(fd_rtcm, data.buffer, data.length);
 }
 
-
 void qxwz_status_response_callback(qxwz_rtcm_status code)
 {
+	static std::string accountInfo = "Account";
+	static std::string logInfo = "Log";
+	static std::string dataInfo = "Data";
+
 	struct tm *ptr = NULL;
 	//test account expire
+	g_status_code = code;
 	if(code == QXWZ_STATUS_OPENAPI_ACCOUNT_TOEXPIRE)
+	{
 		get_qxwz_sdk_account_info();
+		accountInfo = "Will Expire";
+	}
 	else if(code == QXWZ_STATUS_OPENAPI_ACCOUNT_EXPIRED)
+	{
 		printf("账号到期\n");
+		accountInfo = "Expired";
+	}
 	else if(code == QXWZ_STATUS_APPKEY_IDENTIFY_FAIL)
+	{
 		printf("验证失败\n");
+		logInfo = "Identify fail";
+	}
 	else if(code == QXWZ_STATUS_APPKEY_IDENTIFY_SUCCESS)
+	{
 		printf("验证成功\n");
+		logInfo = "Identify succese";
+	}
 	else if(code == QXWZ_STATUS_GGA_SEND_NOT_AVAIABLE)
+	{
 		printf("非法的GPGGA数据\n");
+		dataInfo = "Error gpgga";
+	}
 	else if(code == QXWZ_STATUS_NTRIP_RECEIVING_DATA)
+	{
 		printf("正在接收服务器数据\n");
+		dataInfo = "Receiving";
+	}
 	else if(code == QXWZ_STATUS_NTRIP_CONNECTED)
+	{
 		printf("连接服务器成功\n");
+		logInfo = "Connected";
+	}
+	else if(code ==QXWZ_STATUS_NTRIP_DISCONNECTED)
+	{
+		printf("服务器断开\n");
+		logInfo = "Disconnect";
+	}
 	else
-		QXLOGI("QXWZ_RTCM_STATUS:%d\n",code);;
-		
+	{
+		QXLOGI("QXWZ_RTCM_STATUS:%d\n",code);
+	}
+
+	g_rtk_status =  accountInfo + " | " + logInfo + " | " + dataInfo;
 }
 
 void  get_qxwz_sdk_account_info(void)
@@ -71,8 +113,6 @@ void  get_qxwz_sdk_account_info(void)
 	printf("账号即将到期 expire time : %ld\n",p_account_info->expire_time);
 }
 
-//void getAccountExpireDate(void);
-
 
 #ifdef _QXWZ_TEST_START_STOP
 pthread_t qxwz_rtcm_test;
@@ -81,12 +121,17 @@ void test_qxwz_rtcm_start_stop(void);
 
 char gpggaMsg[200];
 
-int main(int argc, const char * argv[]) {
+int main(int argc, char * argv[]) 
+{
+	ros::init(argc, argv, "rtk_node");
+	
+	ros::NodeHandle nh;
+	ros::Publisher pub = nh.advertise<std_msgs::String>("/rtk_status",1);
 
 	if(argc ==2)
 		fd_rtcm = dev_open(argv[1]);
 	else
-		fd_rtcm = dev_open("/dev/ttyS3");
+		fd_rtcm = dev_open("/dev/ttyS4");
 	if(fd_rtcm == -1)
 		return 0;
 		
@@ -107,76 +152,33 @@ int main(int argc, const char * argv[]) {
     pthread_create(&qxwz_rtcm_test,NULL,test_qxwz_rtcm_start_stop,NULL);
 	#endif
 	
-	//write(fd_rtcm,"UNLOGALL THISPORT",17);
+	std_msgs::String msg;
 	
-	char log_command[] = "LOG COM3 GPGGA ONTIME 1\r\n";
-	
-	int i=0 , try_num = 5;
-	
-	for( ; i<try_num; i++)
-	{
-		write(fd_rtcm,log_command,strlen(log_command));
-		
-		printf("configure gps ing, please waiting....\r\n");
-		sleep(2);
-		int len = read(fd_rtcm,gpggaMsg,199);
-		
-		if(len>0)
-			gpggaMsg[len] = '\0';
-		else
-			continue;
-		
-		char * ptr = strstr(gpggaMsg,"$GPGGA");
-
-		if(ptr != NULL)
-			break;
-	}
-	
-	if(i == try_num)
-	{
-		printf("can not connect gps device...\r\n");
-		return 0;
-	}
-	
-	tcflush(fd_rtcm,TCIOFLUSH);
-
     //每秒发送gga以获取最新的rtcm数据流 
-    while(1)
+    while(ros::ok())
     {
     	usleep(980000);
-        //QXLOGI("Send GGA done\r\n");
-		//getAccountExpireDate();
-		//get_qxwz_sdk_account_info();
 		
 		int len = read(fd_rtcm,gpggaMsg,199);
 		
-		if(len < 0)
-			continue;
+		if(len <= 6) continue;
+			
 		gpggaMsg[len] = '\0';
 		
-		printf("%s\n",gpggaMsg);
+/*		printf("%s\n",gpggaMsg);*/
 		
 		qxwz_rtcm_sendGGAWithGGAString(gpggaMsg);
+		
+		msg.data = g_rtk_status;
+		pub.publish(msg);
     }
     QXLOGI("qxwz_rtcm_stop here\r\n");
 //    //关闭rtcm sdk
     qxwz_rtcm_stop();
     QXLOGI("qxwz_rtcm_stop done\r\n");
+    
     return 0;
 }
-#if 0
-void getAccountExpireDate(void)
-{
-	struct tm *ptr = NULL;
-	expire_time = qxwz_get_account_expire_time();
-	//printf("expire_time=%d,date=",expire_time.expire_time);
-	QXLOGI("expire_time=%d,date=",expire_time.expire_time);
-	ptr = &expire_time.expire_date;
-
-	QXLOGI("year:%d,month:%d,mday:%d,hour:%d,minute:%d,second:%d\n", \
-		ptr->tm_year+1900,ptr->tm_mon+1,ptr->tm_mday,ptr->tm_hour,ptr->tm_min,ptr->tm_sec);
-}
-#endif
 
 #ifdef _QXWZ_TEST_STARTSTOP
 void test_qxwz_rtcm_start_stop(void)
