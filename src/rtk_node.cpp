@@ -23,13 +23,11 @@ int g_status_code;
 qxwz_account_info *p_account_info = NULL;
 void  get_qxwz_sdk_account_info(void);
 
-//unsigned char buf_[] = "wendao\r\n";
-
 void qxwz_rtcm_response_callback(qxwz_rtcm data){
     printf("RTK is running...\t");
     
     printf("QXWZ_RTCM_DATA len:%ld\n",data.length);
-/*    printf("QXWZ_RTCM_DATA:%s\n",data.buffer);*/
+//    printf("QXWZ_RTCM_DATA:%s\n",data.buffer);
     
     write(fd_rtcm, data.buffer, data.length);
 }
@@ -148,12 +146,11 @@ int main(int argc, char * argv[])
     //启动rtcm sdk
     qxwz_rtcm_start(qxwz_rtcm_response_callback,qxwz_status_response_callback);
 
-	#ifdef _QXWZ_TEST_START_STOP
+#ifdef _QXWZ_TEST_START_STOP
     pthread_create(&qxwz_rtcm_test,NULL,test_qxwz_rtcm_start_stop,NULL);
-	#endif
+#endif
 	
 	std_msgs::String msg;
-	
     //每秒发送gga以获取最新的rtcm数据流 
     while(ros::ok())
     {
@@ -165,7 +162,7 @@ int main(int argc, char * argv[])
 			
 		gpggaMsg[len] = '\0';
 		
-/*		printf("%s\n",gpggaMsg);*/
+//		printf("%s\n",gpggaMsg);
 		
 		qxwz_rtcm_sendGGAWithGGAString(gpggaMsg);
 		
@@ -173,7 +170,6 @@ int main(int argc, char * argv[])
 		pub.publish(msg);
     }
     QXLOGI("qxwz_rtcm_stop here\r\n");
-//    //关闭rtcm sdk
     qxwz_rtcm_stop();
     QXLOGI("qxwz_rtcm_stop done\r\n");
     
