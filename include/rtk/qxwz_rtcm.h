@@ -12,6 +12,7 @@
 #include <time.h>
 
 typedef enum {
+    QXWZ_STATUS_NONE  = 0,
     QXWZ_STATUS_NTRIP_CONNECTED=1000,//ntrip连接到服务器
     QXWZ_STATUS_NTRIP_DISCONNECTED=1001,//ntrip断开服务器
     QXWZ_STATUS_APPKEY_IDENTIFY_FAIL=1002,//setting验证失败
