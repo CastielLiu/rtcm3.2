@@ -1,0 +1,10 @@
+<!-- -->
+<launch>
+	<arg name="port" default="/dev/ttyS3"/>
+	<node pkg="rtk" type="rtk_node" name="rtk_node" output="screen">
+		<param name="port" value="$(arg port)" />
+		<rosparam file="$(find rtk)/config/account.yaml" command="load"/>
+		
+	</node>
+</launch>
+
