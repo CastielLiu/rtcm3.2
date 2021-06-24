@@ -78,7 +78,7 @@ void parseRtkcode(qxwz_rtcm_status code)
     else if(code == QXWZ_STATUS_APPKEY_IDENTIFY_SUCCESS)
     {
         diagnostic_msg_.level = diagnostic_msg_.OK;
-        diagnostic_msg_.message = "Identify succese.";
+        diagnostic_msg_.message = "Identify success.";
         
         printf("验证成功\n");
         logInfo = "Identify succese";
