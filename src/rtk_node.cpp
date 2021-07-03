@@ -22,6 +22,7 @@ std::string rtk_status_;
 diagnostic_msgs::DiagnosticStatus diagnostic_msg_;
 std::mutex diagnostic_msg_mutex_;
 bool login = false;
+double last_rtkdata_time = 0;
 
 void  get_qxwz_sdk_account_info(void)
 {
@@ -140,6 +141,7 @@ void qxwz_rtcm_response_callback(qxwz_rtcm data)
 {
     printf("RTK is running...\t");
     printf("QXWZ_RTCM_DATA len:%ld\n",data.length);
+    last_rtkdata_time = ros::Time::now().toSec();
     std::lock_guard<std::mutex> lck(diagnostic_msg_mutex_);
     
     diagnostic_msg_.level = diagnostic_msg_.OK;
@@ -171,6 +173,8 @@ int main(int argc, char * argv[])
     pub_status_ = nh.advertise<std_msgs::String>("/rtk_status",1);
     pub_diagnostic_ = nh.advertise<diagnostic_msgs::DiagnosticStatus>("/driverless/diagnostic",1);
     diagnostic_msg_.hardware_id = __NAME__;
+
+    ros::Duration(3.0).sleep();
     fd_ = dev_open(nh_private.param<std::string>("port","/dev/ttyS3").c_str());
     if(fd_ == -1) return false;
     
@@ -202,27 +206,38 @@ int main(int argc, char * argv[])
         {
             gpgga_msg[len] = '\0';
             qxwz_rtcm_sendGGAWithGGAString(gpgga_msg);
+            gpgga_timeout_cnt = 0;
         }
-        else if(++ gpgga_timeout_cnt > 3)
+
+        if(len < 6 && gpgga_timeout_cnt++ > 3) //gpgga timeout
         {
             std::lock_guard<std::mutex> lck(diagnostic_msg_mutex_);
             diagnostic_msg_.level = diagnostic_msg_.ERROR;
             diagnostic_msg_.message = "No new gpgga data!";
             pub_diagnostic_.publish(diagnostic_msg_);
         }
-        if(!login)
+        else if(!login)  //not login
         {
             std::lock_guard<std::mutex> lck(diagnostic_msg_mutex_);
             diagnostic_msg_.level = diagnostic_msg_.ERROR;
             diagnostic_msg_.message = "Disconnect!";
             pub_diagnostic_.publish(diagnostic_msg_);
         }
+        else if(ros::Time::now().toSec() - last_rtkdata_time > 1.5) //login but data timeout
+        {
+            std::lock_guard<std::mutex> lck(diagnostic_msg_mutex_);
+            diagnostic_msg_.level = diagnostic_msg_.ERROR;
+            diagnostic_msg_.message = "Rtk data timeout!";
+            pub_diagnostic_.publish(diagnostic_msg_);
+        }
+
         loop_rate.sleep();
     }
+    close(fd_);
     printf("qxwz_rtcm_stop here\r\n");
     qxwz_rtcm_stop();
     printf("qxwz_rtcm_stop done\r\n");
-    close(fd_);
+    
     
     return 0;
 }
