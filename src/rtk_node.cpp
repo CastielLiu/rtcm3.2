@@ -199,6 +199,7 @@ int main(int argc, char * argv[])
     char gpgga_msg[200];
     ros::Rate loop_rate(1);
     int gpgga_timeout_cnt = 0; 
+    last_rtkdata_time = ros::Time::now().toSec();
     while(ros::ok())
     {
         int len = read(fd_,gpgga_msg,199);
