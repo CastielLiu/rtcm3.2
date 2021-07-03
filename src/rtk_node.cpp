@@ -21,6 +21,7 @@ ros::Publisher pub_status_;
 std::string rtk_status_;
 diagnostic_msgs::DiagnosticStatus diagnostic_msg_;
 std::mutex diagnostic_msg_mutex_;
+bool login = false;
 
 void  get_qxwz_sdk_account_info(void)
 {
@@ -103,6 +104,7 @@ void parseRtkcode(qxwz_rtcm_status code)
         diagnostic_msg_.message = "Connected.";
         printf("连接服务器成功\n");
         logInfo = "Connected";
+        login = true;
     }
     else if(code ==QXWZ_STATUS_NTRIP_DISCONNECTED)
     {
@@ -110,6 +112,7 @@ void parseRtkcode(qxwz_rtcm_status code)
         diagnostic_msg_.message = "Disconnect.";
         printf("服务器断开\n");
         logInfo = "Disconnect";
+        login = false;
     }
     else if(code ==QXWZ_STATUS_NETWORK_ERROR)
     {
@@ -117,6 +120,7 @@ void parseRtkcode(qxwz_rtcm_status code)
         diagnostic_msg_.message = "Network error!";
         printf("网络异常\n");
         logInfo = "Network error";
+        login = false;
     }
     else
     {
@@ -136,6 +140,12 @@ void qxwz_rtcm_response_callback(qxwz_rtcm data)
 {
     printf("RTK is running...\t");
     printf("QXWZ_RTCM_DATA len:%ld\n",data.length);
+    std::lock_guard<std::mutex> lck(diagnostic_msg_mutex_);
+    
+    diagnostic_msg_.level = diagnostic_msg_.OK;
+    diagnostic_msg_.message = "Received rtk data.";
+    pub_diagnostic_.publish(diagnostic_msg_);
+
     write(fd_, data.buffer, data.length);
 }
 
@@ -188,34 +198,31 @@ int main(int argc, char * argv[])
     while(ros::ok())
     {
         int len = read(fd_,gpgga_msg,199);
-		
-	    if(len <= 6)
-	    {
-	        if(++ gpgga_timeout_cnt > 3)
-	        {
-	            std::lock_guard<std::mutex> lck(diagnostic_msg_mutex_);
-	            diagnostic_msg_.level = diagnostic_msg_.WARN;
-                diagnostic_msg_.message = "No new gpgga data!";
-                pub_diagnostic_.publish(diagnostic_msg_);
-	        }
-	        loop_rate.sleep();
-	        continue;
-	    }
-		
-	    gpgga_msg[len] = '\0';
-	    
-	    qxwz_rtcm_sendGGAWithGGAString(gpgga_msg);
-	    
-	    std::lock_guard<std::mutex> lck(diagnostic_msg_mutex_);
-	    diagnostic_msg_.level = diagnostic_msg_.OK;
-        diagnostic_msg_.message = "Gpgga reporting...";
-        pub_diagnostic_.publish(diagnostic_msg_);
-	    
-	    loop_rate.sleep();
+        if(len > 6)
+        {
+            gpgga_msg[len] = '\0';
+            qxwz_rtcm_sendGGAWithGGAString(gpgga_msg);
+        }
+        else if(++ gpgga_timeout_cnt > 3)
+        {
+            std::lock_guard<std::mutex> lck(diagnostic_msg_mutex_);
+            diagnostic_msg_.level = diagnostic_msg_.ERROR;
+            diagnostic_msg_.message = "No new gpgga data!";
+            pub_diagnostic_.publish(diagnostic_msg_);
+        }
+        if(!login)
+        {
+            std::lock_guard<std::mutex> lck(diagnostic_msg_mutex_);
+            diagnostic_msg_.level = diagnostic_msg_.ERROR;
+            diagnostic_msg_.message = "Disconnect!";
+            pub_diagnostic_.publish(diagnostic_msg_);
+        }
+        loop_rate.sleep();
     }
     printf("qxwz_rtcm_stop here\r\n");
     qxwz_rtcm_stop();
     printf("qxwz_rtcm_stop done\r\n");
+    close(fd_);
     
     return 0;
 }
